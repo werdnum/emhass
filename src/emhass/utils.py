@@ -433,7 +433,7 @@ def get_yaml_parse(config_path: str, use_secrets: Optional[bool] = True,
     else:
         optim_conf = input_conf.get('optim_conf', {})
 
-    optim_conf['list_hp_periods'] = dict((key,d[key]) for d in optim_conf['list_hp_periods'] for key in d)
+    optim_conf['list_hp_periods'] = dict((key,d[key]) for d in optim_conf.get('list_hp_periods', []) for key in d)
     optim_conf['delta_forecast'] = pd.Timedelta(days=optim_conf['delta_forecast'])
     
     if (type(input_conf['plant_conf']) == list):
