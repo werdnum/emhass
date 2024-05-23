@@ -293,8 +293,8 @@ class RetrieveHass:
         forecast_list = []
         for i, ts in enumerate(ts_list):
             datum = {}
-            datum["date"] = ts
-            datum[entity_id.split("sensor.")[1]] = vals_list[i]
+            datum["date"] = ts.isoformat()
+            datum[key] = str(np.round(row[key], 2))
             forecast_list.append(datum)
         data = {
             "state": "{:.2f}".format(state),
