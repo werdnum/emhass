@@ -944,5 +944,9 @@ def set_df_index_freq(df: pd.DataFrame) -> pd.DataFrame:
     idx_diff = np.diff(df.index)
     sampling = pd.to_timedelta(np.median(idx_diff))
     df = df[~df.index.duplicated()]
-    df = df.asfreq(sampling)
+    try:
+        df = df.asfreq(sampling)
+    except ZeroDivisionError as e:
+        logging.error("Divide by zero when trying to set frequency for dataframe to %r:\n %r", sampling, df)
+        raise e
     return df
