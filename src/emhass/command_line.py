@@ -1144,8 +1144,8 @@ def main():
         )
     # Setup parameters
     input_data_dict = set_input_data_dict(emhass_conf,
-                                          args.costfun, args.params, args.runtimeparams, args.action,
-                                          logger, args.debug)
+                                          args.costfun, args.params, args.runtimeparams, args.action, logger)
+
     # Perform selected action
     if args.action == "perfect-optim":
         opt_res = perfect_forecast_optim(
