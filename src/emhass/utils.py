@@ -947,6 +947,6 @@ def set_df_index_freq(df: pd.DataFrame) -> pd.DataFrame:
     try:
         df = df.asfreq(sampling)
     except ZeroDivisionError as e:
-        logging.error("Divide by zero when trying to set frequency for dataframe to %r:\n %r", sampling, df)
+        logging.error("Divide by zero when trying to set frequency for dataframe to %r (median of diffs %r of index %r). Source dataframe: \n%r", sampling, df.index, idx_diff, df)
         raise e
     return df
