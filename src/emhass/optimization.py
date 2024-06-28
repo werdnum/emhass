@@ -404,11 +404,10 @@ class Optimization:
                             sense = plp.LpConstraintEQ,
                             rhs = def_total_hours[k]*self.optim_conf['P_deferrable_nom'][k])
                         })
-                if "def_load_config" in self.optim_conf and len(self.optim_conf["thermal_config"]) > k:
+                if "def_load_config" in self.optim_conf and len(self.optim_conf["def_load_config"]) > k:
                     def_load_config = self.optim_conf['def_load_config'][k]
                     if def_load_config and 'thermal_config' in def_load_config:
                         hc = def_load_config["thermal_config"]
-                        self.logger.info("Thermal config %s found for deferrable load %s", hc, k)
                         start_temperature = hc["start_temperature"]
                         cooling_constant = hc["cooling_constant"]
                         heating_rate = hc["heating_rate"]
@@ -442,7 +441,7 @@ class Optimization:
                             )
                         for I in set_I})
 
-                    predicted_temps[k] = predicted_temp
+                        predicted_temps[k] = predicted_temp
 
             # Ensure deferrable loads consume energy between def_start_timestep & def_end_timestep
             self.logger.debug("Deferrable load {}: Proposed optimization window: {} --> {}".format(k, def_start_timestep[k], def_end_timestep[k]))
