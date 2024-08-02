@@ -43,6 +43,8 @@ MANIFEST
 # Local session data 
 data/actionLogs.txt
 data/entities/*.json
+data/problem.lp
+data/result.json
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

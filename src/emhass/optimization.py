@@ -12,6 +12,7 @@ import numpy as np
 import pulp as plp
 from pulp import PULP_CBC_CMD, COIN_CMD, GLPK_CMD
 from math import ceil
+import json
 
 
 class Optimization:
@@ -74,7 +75,7 @@ class Optimization:
         self.var_load = self.retrieve_hass_conf['var_load']
         self.var_load_new = self.var_load+'_positive'
         self.costfun = costfun
-        # self.emhass_conf = emhass_conf
+        self.emhass_conf = emhass_conf
         self.logger = logger
         self.var_load_cost = var_load_cost
         self.var_prod_price = var_prod_price
@@ -658,6 +659,16 @@ class Optimization:
         # The status of the solution is printed to the screen
         self.optim_status = plp.LpStatus[opt_model.status]
         self.logger.info("Status: " + self.optim_status)
+        lp_debug_path = self.emhass_conf['data_path']
+        opt_model.writeLP(lp_debug_path / 'problem.lp')
+        with open(lp_debug_path / "result.json", "w")as f:
+            vars_dump = {v.name: v.varValue for v in opt_model.variables()}
+            result_dump = {
+                "vars": vars_dump,
+                "constraints": {k: v.toDict() for k, v in opt_model.constraints.items()},
+                "cost_fun": opt_model.objective.toDict(),
+            }
+            json.dump(result_dump, f, default=repr, indent=2)
         if plp.value(opt_model.objective) is None:
             self.logger.warning("Cost function cannot be evaluated")
             return
