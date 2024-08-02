@@ -408,6 +408,7 @@ class Optimization:
                     def_load_config = self.optim_conf['def_load_config'][k]
                     if def_load_config and 'thermal_config' in def_load_config:
                         hc = def_load_config["thermal_config"]
+                        self.logger.debug("Deferrable load {}: Using thermal configuration: {}".format(k, hc))
                         start_temperature = hc["start_temperature"]
                         cooling_constant = hc["cooling_constant"]
                         heating_rate = hc["heating_rate"]

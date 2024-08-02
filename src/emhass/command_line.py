@@ -111,6 +111,7 @@ def set_input_data_dict(emhass_conf: dict, costfun: str,
             columns=["P_PV_forecast", "P_load_forecast"])
         if "freq" in retrieve_hass_conf and retrieve_hass_conf["freq"]:
             freq = pd.to_timedelta(retrieve_hass_conf["freq"], "minute")
+            df_input_data_dayahead = df_input_data_dayahead[~df_input_data_dayahead.index.duplicated()]
             df_input_data_dayahead = df_input_data_dayahead.asfreq(freq)
         else:
             df_input_data_dayahead = utils.set_df_index_freq(df_input_data_dayahead)
@@ -161,6 +162,7 @@ def set_input_data_dict(emhass_conf: dict, costfun: str,
         df_input_data_dayahead = pd.concat([P_PV_forecast, P_load_forecast], axis=1)
         if "freq" in retrieve_hass_conf and retrieve_hass_conf["freq"]:
             freq = pd.to_timedelta(retrieve_hass_conf["freq"], "minute")
+            df_input_data_dayahead = df_input_data_dayahead[~df_input_data_dayahead.index.duplicated()]
             df_input_data_dayahead = df_input_data_dayahead.asfreq(freq)
         else:
             df_input_data_dayahead = utils.set_df_index_freq(df_input_data_dayahead)
