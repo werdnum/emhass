@@ -361,7 +361,10 @@ class Optimization:
         # Treat deferrable loads constraints
         predicted_temps = {}
         for k in range(self.optim_conf['num_def_loads']):
-            
+            def_load_config = {}
+            if "def_load_config" in  self.optim_conf and len(self.optim_conf["def_load_config"]) > k:
+                def_load_config = self.optim_conf["def_load_config"][k]
+
             if type(self.optim_conf['P_deferrable_nom'][k]) == list:
                 # Constraint for sequence of deferrable
                 # WARNING: This is experimental, formulation seems correct but feasibility problems.
@@ -402,43 +405,41 @@ class Optimization:
                             rhs = 0)
                         for i in set_I})
             
-            elif "def_load_config" in self.optim_conf.keys():
-                if "thermal_config" in self.optim_conf["def_load_config"][k]:
-                    # Special case of a thermal deferrable load
-                    def_load_config = self.optim_conf['def_load_config'][k]
-                    if def_load_config and 'thermal_config' in def_load_config:
-                        hc = def_load_config["thermal_config"]
-                        start_temperature = hc["start_temperature"]
-                        cooling_constant = hc["cooling_constant"]
-                        heating_rate = hc["heating_rate"]
-                        overshoot_temperature = hc["overshoot_temperature"]
-                        outdoor_temperature_forecast = data_opt['outdoor_temperature_forecast']
-                        desired_temperatures = hc["desired_temperatures"]
-                        sense = hc.get('sense', 'heat')
-                        predicted_temp = [start_temperature]
-                        for I in set_I:
-                            if I == 0:
-                                continue
-                            predicted_temp.append(
-                                predicted_temp[I-1]
-                                + (P_deferrable[k][I-1] * (heating_rate * self.timeStep / self.optim_conf['P_deferrable_nom'][k]))
-                                - (cooling_constant * (predicted_temp[I-1] - outdoor_temperature_forecast[I-1])))
-                            if len(desired_temperatures) > I and desired_temperatures[I]:
-                                constraints.update({"constraint_defload{}_temperature_{}".format(k, I):
-                                    plp.LpConstraint(
-                                        e = predicted_temp[I],
-                                        sense = plp.LpConstraintGE if sense == 'heat' else plp.LpConstraintLE,
-                                        rhs = desired_temperatures[I],
-                                    )
-                                })
-                        constraints.update({"constraint_defload{}_overshoot_temp_{}".format(k, I):
+            elif def_load_config and 'thermal_config' in def_load_config:
+                # Special case of a thermal deferrable load
+                hc = def_load_config["thermal_config"]
+                self.logger.debug("Deferrable load {}: Using thermal configuration: {}".format(k, hc))
+                start_temperature = hc["start_temperature"]
+                cooling_constant = hc["cooling_constant"]
+                heating_rate = hc["heating_rate"]
+                overshoot_temperature = hc["overshoot_temperature"]
+                outdoor_temperature_forecast = data_opt['outdoor_temperature_forecast']
+                desired_temperatures = hc["desired_temperatures"]
+                sense = hc.get('sense', 'heat')
+                predicted_temp = [start_temperature]
+                for I in set_I:
+                    if I == 0:
+                        continue
+                    predicted_temp.append(
+                        predicted_temp[I-1]
+                        + (P_deferrable[k][I-1] * (heating_rate * self.timeStep / self.optim_conf['P_deferrable_nom'][k]))
+                        - (cooling_constant * (predicted_temp[I-1] - outdoor_temperature_forecast[I-1])))
+                    if len(desired_temperatures) > I and desired_temperatures[I]:
+                        constraints.update({"constraint_defload{}_temperature_{}".format(k, I):
                             plp.LpConstraint(
                                 e = predicted_temp[I],
-                                sense = plp.LpConstraintLE if sense == 'heat' else plp.LpConstraintGE,
-                                rhs = overshoot_temperature,
+                                sense = plp.LpConstraintGE if sense == 'heat' else plp.LpConstraintLE,
+                                rhs = desired_temperatures[I],
                             )
-                        for I in set_I})
-                        predicted_temps[k] = predicted_temp
+                        })
+                constraints.update({"constraint_defload{}_overshoot_temp_{}".format(k, I):
+                    plp.LpConstraint(
+                            e = predicted_temp[I],
+                            sense = plp.LpConstraintLE if sense == 'heat' else plp.LpConstraintGE,
+                            rhs = overshoot_temperature,
+                        )
+                    for I in set_I})
+                predicted_temps[k] = predicted_temp
             
             else:
                 
