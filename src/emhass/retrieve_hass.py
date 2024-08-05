@@ -157,8 +157,12 @@ class RetrieveHass:
                 try:  # Sometimes when there are connection problems we need to catch empty retrieved json
                     data = response.json()[0]
                 except IndexError:
+                    self.logger.info("Request URL: %s", url)
+                    self.logger.info("Problematic response from HASS: %d %s", response.status_code, response.reason)
+                    self.logger.info("Response content: %r", response.text)
+                    self.logger.info("Retrieving data for days: %r", days_list)
                     if x == 0:
-                        self.logger.error("The retrieved JSON is empty, A sensor:" + var + " may have 0 days of history, passed sensor may not be correct, or days to retrieve is set too heigh")
+                        self.logger.error("The retrieved JSON is empty, A sensor:" + var + " may have 0 days of history, passed sensor may not be correct, or days to retrieve is set too heigh", stack_info=True)
                     else:
                         self.logger.error("The retrieved JSON is empty for day:"+ str(day) +", days_to_retrieve may be larger than the recorded history of sensor:" + var + " (check your recorder settings)")
                     return False
