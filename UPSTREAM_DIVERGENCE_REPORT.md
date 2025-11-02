@@ -10,7 +10,12 @@ This repository diverged from upstream approximately 1 year ago (November 10, 20
 - **Our fork:** 6 commits adding targeted improvements
 - **Upstream:** 590 commits with major refactoring and new features
 
-**Key Finding:** Our thermal management implementation (June 2024) is MORE ADVANCED than upstream's later implementation (April 2025), as we support both 'constrain' and 'penalize' modes while upstream only supports 'penalize' mode.
+**Key Findings:**
+1. **Debugging Feature** - We have a unique LP problem export capability that upstream lacks (genuinely valuable)
+2. **Dockerfile ARG Pattern** - Required for our CI infrastructure to inject pre-built base images (local customization, not for upstream)
+3. **Thermal Mode Selection** - Nice-to-have API convenience, but functionally equivalent to upstream's penalty approach with high penalty_factor
+
+**Fork Purpose:** Minimal local patches for CI requirements + contribution of generally-useful debugging features back to upstream.
 
 ---
 
@@ -26,7 +31,7 @@ This repository diverged from upstream approximately 1 year ago (November 10, 20
 
 ### 1. **Thermal Management Enhancements** (fccd9ed, 1ff13e1)
 **Date:** June 29, 2024
-**Status:** 🟢 UNIQUE VALUE - More advanced than upstream
+**Status:** 🟡 MINOR CONVENIENCE - Functionally equivalent to upstream
 
 **Our Implementation:**
 - Dual-mode thermal management: 'constrain' and 'penalize'
@@ -45,11 +50,14 @@ elif hc['mode'] == 'penalize':
 
 **Upstream Comparison:**
 - Upstream implemented similar thermal features in April 2025 (commit 2f0cf19)
-- BUT: Upstream ONLY supports penalty mode (no 'constrain' mode option)
+- Upstream uses penalty-only approach (no 'constrain' mode)
 - Upstream has similar overshoot logic
 - Upstream has better logging
 
-**Verdict:** Our implementation is MORE FLEXIBLE. Should be preserved and potentially contributed back to upstream.
+**Optimization Theory Note:**
+From an optimization perspective, `constrain` ≈ `penalize` with very high penalty factor. As penalty_factor approaches infinity, the soft constraint effectively becomes a hard constraint. Users can achieve the same result with upstream by setting `penalty_factor: 10000` or similar.
+
+**Verdict:** Nice API convenience (explicit mode is clearer than magic numbers), but not functionally critical. Can be dropped to simplify rebase. Users can achieve same behavior with high penalty values.
 
 ---
 
@@ -81,7 +89,7 @@ def_end_timestep = def_end_timestep + [0] * (num_deferrable_loads - len(def_end_
 
 ### 3. **Dockerfile Base Image Customization** (c6ce621)
 **Date:** May 8, 2024
-**Status:** 🔴 COMPLETELY OBSOLETE
+**Status:** 🟢 REQUIRED INFRASTRUCTURE - Critical for CI pipeline
 
 **Our Change:**
 - Added build argument to specify custom base image:
@@ -90,6 +98,20 @@ ARG base_image=ghcr.io/home-assistant/$TARGETARCH-base-$os_version:bookworm
 FROM ${base_image} AS base
 ```
 
+**Why This Matters - CI Pipeline Requirement:**
+This enables our Concourse CI pipeline to inject pre-built base images as OCI tarballs:
+```yaml
+params:
+  IMAGE_ARG_base_image: base-image/image.tar
+```
+
+This pattern supports:
+- **Image caching** - Avoid re-downloading base images on every build
+- **Security scanning** - Pre-scan and approve base images before use
+- **Air-gapped builds** - Base image fetched through separate, controlled pipeline
+- **Reproducibility** - Pin exact base image versions independent of registry state
+- **Enterprise compliance** - Required for many production CI/CD environments
+
 **Upstream Status:**
 - Complete Dockerfile rewrite (multiple commits 2024-2025)
 - Migrated from `pip` to `uv` package manager
@@ -97,9 +119,20 @@ FROM ${base_image} AS base
 - Changed data path from `/app/data/` to `/data/`
 - Added `gunicorn` as production server
 - Removed 32-bit ARM support
-- Our change no longer applies due to complete restructure
+- Upstream uses hardcoded base image (no ARG pattern)
 
-**Verdict:** Completely obsolete. Cannot be ported to new Dockerfile structure.
+**Verdict:** MUST BE PRESERVED as local patch. This is a legitimate infrastructure customization for enterprise CI/CD. Not suitable for upstream contribution (too specific to our build environment). Must be reapplied to new Dockerfile structure during rebase.
+
+**Migration Strategy:**
+```dockerfile
+# Add ARG at top of upstream's new Dockerfile:
+ARG base_image=ghcr.io/home-assistant/$TARGETARCH-base-debian:bookworm
+
+# Replace their FROM line:
+FROM ${base_image} AS base
+
+# Keep all other upstream changes (uv, gunicorn, /data/, etc.)
+```
 
 ---
 
@@ -212,12 +245,18 @@ with open(lp_debug_path / "result.json", "w") as f:
 - Our thermal mode selection needs to be added to their code
 
 ### Dockerfile
-**Status:** 🔴 COMPLETE REWRITE
+**Status:** 🟢 REWRITE WITH REQUIRED PATCH
 
-Cannot merge - completely different structure:
+Upstream completely rewrote the Dockerfile:
 - Old: pip-based, /app/data/
 - New: uv-based, /data/, gunicorn
-- Our base_image ARG is now meaningless
+
+**Our Required Changes:**
+- Must reapply base_image ARG pattern to new structure
+- This is a local customization for our CI infrastructure
+- Simple 2-line addition to upstream's new Dockerfile
+
+**Migration:** Accept upstream's complete rewrite, then add ARG pattern at the top
 
 ### tests/test_optimization.py
 **Status:** 🟡 SIGNIFICANT CHANGES
@@ -230,190 +269,217 @@ Cannot merge - completely different structure:
 
 ## Change Categorization
 
-### 🟢 Changes Still Useful & Should Be Preserved (2)
+### 🟢 Changes MUST Be Preserved (2)
 
-1. **Thermal Management Mode Selection**
-   - Our 'constrain' mode option is MORE CAPABLE than upstream
-   - Provides flexibility upstream lacks
-   - Well-tested in our fork
-   - **Action:** Definitely preserve, consider contributing back
-
-2. **Optimization Debugging Feature**
-   - Unique debugging capability
+1. **Optimization Debugging Feature** (edc4678)
+   - Unique debugging capability for exporting LP problems
    - No equivalent in upstream
-   - Very useful for troubleshooting
-   - **Action:** Preserve, make configurable
+   - Extremely useful for troubleshooting infeasible optimizations
+   - **Action:** Preserve, make configurable, contribute to upstream
 
-### 🟡 Changes Needing Adaptation (2)
+2. **Dockerfile Base Image ARG** (c6ce621)
+   - **CRITICAL for CI infrastructure** - enables OCI tarball injection
+   - Required for enterprise build pipelines (caching, security, air-gap)
+   - Not suitable for upstream (too specific to our environment)
+   - **Action:** Preserve as local patch, reapply to new Dockerfile
 
-1. **Unit Tests for Thermal Management**
-   - Core logic is valuable
-   - Needs adaptation to upstream's test framework
-   - Must work with their refactored code
-   - **Action:** Adapt and integrate
+### 🟡 Changes Needing Adaptation (1)
 
-2. **Thermal Overshoot Logic Details**
-   - Both versions have similar logic
-   - Ours may have subtle improvements
-   - Need careful comparison to see if any details are better
-   - **Action:** Compare carefully during rebase
+1. **Unit Tests for Thermal Management** (1ff13e1)
+   - Core test logic is valuable
+   - Needs adaptation to upstream's refactored test framework
+   - Must work with their reformatted code (ruff)
+   - **Action:** Adapt and integrate selected tests
 
-### 🔴 Changes Now Obsolete (2)
+### 🟠 Changes Nice-to-Have But Optional (1)
 
-1. **Dockerfile Base Image ARG**
-   - Dockerfile completely rewritten
-   - Our change no longer applicable
-   - **Action:** Discard
+1. **Thermal Management Mode Selection** (fccd9ed)
+   - API convenience: explicit `mode='constrain'` vs `penalty_factor=10000`
+   - Functionally equivalent to upstream's penalty approach
+   - Adds code complexity for minimal benefit
+   - **Action:** DROP to simplify rebase (users can use high penalty_factor)
 
-2. **Deferrable Load Padding**
+### 🔴 Changes Now Obsolete (1)
+
+1. **Deferrable Load Padding** (bcc462b)
    - Upstream has identical logic plus more features
-   - Our version is now redundant
+   - Our version is completely redundant
    - **Action:** Discard, use upstream version
 
 ---
 
 ## Rebase Strategy Recommendations
 
-### Option A: Clean Rebase (RECOMMENDED)
-**Complexity:** High
-**Outcome:** Clean history, modern codebase
+### RECOMMENDED: Clean Rebase with Minimal Patches
+**Complexity:** Medium
+**Outcome:** Modern codebase with essential local customizations
 
 **Steps:**
-1. Create new branch from upstream/master
-2. Cherry-pick thermal mode selection logic
-3. Cherry-pick debugging feature (with config option)
-4. Adapt thermal tests to new framework
-5. Resolve conflicts carefully in optimization.py
-6. Update all code to match ruff formatting
-7. Test extensively
+1. **Rebase onto upstream/master**
+   ```bash
+   git fetch upstream
+   git rebase upstream/master
+   ```
+
+2. **For each commit during rebase:**
+   - **fccd9ed (thermal mode):** DROP - not worth the complexity
+   - **bcc462b (deferrable padding):** DROP - upstream has same + better
+   - **c6ce621 (Dockerfile ARG):** KEEP - modify to work with new Dockerfile
+   - **1ff13e1 (thermal tests):** ADAPT - update to new test framework
+   - **edc4678 (debug export):** KEEP - make configurable
+   - **ef96338 (merge):** DROP - merge commit
+
+3. **Dockerfile conflict resolution:**
+   ```dockerfile
+   # Take upstream's entire new Dockerfile, then add at top:
+   ARG base_image=ghcr.io/home-assistant/$TARGETARCH-base-debian:bookworm
+   FROM ${base_image} AS base
+   # ... rest of upstream's content
+   ```
+
+4. **Debug feature integration:**
+   ```python
+   # Add configuration option in optim_conf
+   if self.optim_conf.get('debug_export_problem', False):
+       lp_debug_path = self.emhass_conf['data_path']
+       opt_model.writeLP(lp_debug_path / 'problem.lp')
+       # ... rest of debug code
+   ```
+
+5. **Test thoroughly:**
+   - All upstream tests must pass
+   - CI pipeline with base image injection must work
+   - Debug export must work when enabled
 
 **Advantages:**
 - Clean integration with upstream
-- Access to all new features (HiGHS, InfluxDB, etc.)
-- Future merges will be easier
-- Code quality improvements from upstream
+- Access to all 590 commits of improvements (HiGHS, InfluxDB, DST fixes, etc.)
+- Minimal maintenance burden going forward
+- Only 2 local patches to maintain
 
-**Disadvantages:**
-- Significant work required
-- Extensive testing needed
-- May break existing workflows temporarily
+**Result:** A clean fork that:
+- Stays close to upstream (easy to sync)
+- Preserves critical CI infrastructure
+- Adds optional debugging capability
+- Can contribute debug feature back to community
 
-### Option B: Selective Port
-**Complexity:** Medium
-**Outcome:** Keep our branch, port specific upstream features
-
-**Steps:**
-1. Stay on our branch
-2. Manually port specific upstream features we want
-3. Keep our thermal implementation as-is
-4. Keep debugging feature as-is
+### Alternative: Contribute Debug Feature First
+**If you have time:** Create PR to upstream with debug feature before rebasing
 
 **Advantages:**
-- Less disruptive
-- Keep full control
-- Faster short-term
+- Community benefit
+- One less local patch to maintain
+- Recognition for contribution
 
-**Disadvantages:**
-- Growing divergence over time
-- Miss out on many upstream improvements
-- Future synchronization becomes harder
-
-### Option C: Contribute Back Then Rebase
-**Complexity:** High
-**Outcome:** Best long-term, helps community
-
-**Steps:**
-1. Create PR to upstream adding 'constrain' mode option
-2. Create PR to upstream adding debugging feature
-3. Wait for upstream acceptance
-4. Then do clean rebase from upstream
-5. All our improvements are now in upstream
-
-**Advantages:**
-- Benefits entire community
-- Cleanest long-term solution
-- Recognition for our work
-- Simplest maintenance going forward
-
-**Disadvantages:**
-- Requires upstream approval
-- May involve modifications based on review
-- Takes longer
+**Process:**
+1. Create clean branch from upstream/master
+2. Add debug export as configurable feature
+3. Submit PR to davidusb-geek/emhass
+4. After acceptance, rebase becomes even simpler (only Dockerfile ARG patch)
 
 ---
 
 ## Specific Rebase Challenges
 
-### Challenge 1: Thermal Management Code
-**Location:** optimization.py lines 400-500
+### Challenge 1: Dockerfile Base Image ARG
+**Location:** Dockerfile line 1-5
 
 **Problem:**
-- Both versions modified same code section
-- Upstream reformatted everything with ruff
-- Need to add our mode selection to their penalty-only code
+- Upstream completely rewrote Dockerfile (pip→uv, /app/data/→/data/, gunicorn)
+- Need to preserve ARG pattern for CI pipeline
+- Must work with new structure
 
 **Solution:**
-```python
-# Add this to upstream's thermal section:
-mode = hc.get('mode', 'penalize')  # Default to penalize for backward compatibility
+```dockerfile
+# At the very top of upstream's new Dockerfile, add:
+ARG base_image=ghcr.io/home-assistant/$TARGETARCH-base-debian:bookworm
 
-if mode == 'constrain':
-    # Use our hard constraint logic
-    constraints.update({"constraint_defload{}_temperature_{}".format(k, Id):
-        plp.LpConstraint(
-            e = predicted_temp[Id],
-            sense = plp.LpConstraintGE if sense == 'heat' else plp.LpConstraintLE,
-            rhs = desired_temperatures[Id],
-        )
-    })
-elif mode == 'penalize':
-    # Keep upstream's penalty logic (which matches ours)
-    penalty_factor = hc.get("penalty_factor", 10)
-    # ... rest of penalty code
+# Then change their FROM line from:
+FROM ghcr.io/home-assistant/$TARGETARCH-base-debian:bookworm AS base
+
+# To:
+FROM ${base_image} AS base
+
+# Keep everything else from upstream unchanged
 ```
+
+**Testing:**
+- Verify CI can pass `IMAGE_ARG_base_image: base-image/image.tar`
+- Confirm OCI tarball injection still works
+- Test both default (no ARG) and custom base image paths
 
 ### Challenge 2: Debugging Feature Integration
 **Location:** optimization.py end of perform_optimization()
 
 **Problem:**
-- Need to add our debugging code without breaking upstream's cleaner structure
-- Should be configurable, not always-on
+- Need to add debugging code to upstream's reformatted file
+- Should be configurable (off by default)
+- Must respect new file structure (/data/ instead of /app/data/)
 
 **Solution:**
 ```python
-# Add to optim_conf:
-if optim_conf.get('debug_export', False):
+# Add after optimization completes, before returning:
+if self.optim_conf.get('debug_export_problem', False):
     lp_debug_path = self.emhass_conf['data_path']
+    self.logger.info(f"Exporting optimization problem to {lp_debug_path}")
+
+    # Export LP problem in multiple formats
     opt_model.writeLP(lp_debug_path / 'problem.lp')
-    # ... rest of debug code
+    opt_model.toJson(lp_debug_path / 'problem.json')
+
+    # Export solution
+    with open(lp_debug_path / "result.json", "w") as f:
+        result_dump = {
+            "status": self.optim_status,
+            "objective_value": plp.value(opt_model.objective),
+            "vars": {v.name: v.varValue for v in opt_model.variables()},
+            "constraints": {k: v.toDict() for k, v in opt_model.constraints.items()},
+            "cost_fun": opt_model.objective.toDict(),
+        }
+        json.dump(result_dump, f, default=repr, indent=2)
 ```
 
-### Challenge 3: File Structure Changes
+**Configuration:**
+Add to config documentation that users can enable with:
+```json
+{
+  "optim_conf": {
+    "debug_export_problem": true
+  }
+}
+```
+
+### Challenge 3: Thermal Tests Adaptation
+**Location:** tests/test_optimization.py
+
 **Problem:**
-- /app/data/ → /data/
-- setup.py → pyproject.toml
-- pip → uv
+- Upstream refactored test file completely
+- New test patterns and structure
+- Code reformatted with ruff
 
 **Solution:**
-- Accept all upstream changes
-- Update our local development setup
-- Update any documentation we have
+- Take upstream's test file as base
+- Port our thermal-specific test cases to their structure
+- Follow their naming conventions and setup patterns
+- Ensure tests work with penalty-based approach (not constrain mode)
 
 ---
 
 ## Testing Requirements After Rebase
 
 ### Critical Tests
-1. ✅ Thermal management with mode='constrain'
-2. ✅ Thermal management with mode='penalize'
-3. ✅ Deferrable loads with missing timestep config
-4. ✅ Debug export functionality (when enabled)
-5. ✅ All existing upstream tests still pass
+1. ✅ All upstream unit tests pass
+2. ✅ Debug export functionality (when `debug_export_problem: true`)
+3. ✅ Debug export OFF by default (when config not set)
+4. ✅ CI pipeline with base image injection works
+5. ✅ Default Dockerfile build (no custom base image)
 
 ### Integration Tests
-1. ✅ Real optimization with thermal loads
+1. ✅ Real optimization with thermal loads (penalty-based)
 2. ✅ Battery + deferrable loads
-3. ✅ Performance benchmarks (ensure no regression)
+3. ✅ HiGHS solver (new upstream feature)
+4. ✅ New `/data/` path structure works correctly
+5. ✅ Performance benchmarks (ensure no regression from upstream changes)
 
 ---
 
@@ -421,12 +487,18 @@ if optim_conf.get('debug_export', False):
 
 | Task | Effort | Risk |
 |------|--------|------|
-| Set up upstream rebase | 1-2 hours | Low |
-| Resolve optimization.py conflicts | 4-6 hours | High |
-| Adapt unit tests | 2-3 hours | Medium |
-| Update to ruff formatting | 1 hour | Low |
-| Testing & validation | 4-6 hours | High |
-| **Total** | **12-18 hours** | **High** |
+| Set up upstream rebase | 1 hour | Low |
+| Dockerfile ARG reapplication | 1 hour | Low |
+| Debug feature integration | 2-3 hours | Medium |
+| Adapt selected unit tests | 2-3 hours | Medium |
+| Testing & validation | 3-4 hours | Medium |
+| **Total** | **8-12 hours** | **Medium** |
+
+**Effort Reduction Factors:**
+- Dropping thermal mode selection saves ~4 hours (no complex merge)
+- Dropping deferrable load padding saves ~1 hour (redundant code)
+- Dockerfile ARG is simple 2-line patch, not complex rewrite
+- Only ~2 local patches to maintain going forward
 
 ---
 
@@ -435,60 +507,78 @@ if optim_conf.get('debug_export', False):
 ### Immediate Actions (Priority 1)
 1. ✅ **Create this report** (DONE)
 2. 🔲 **Backup current branch** - Tag as `pre-rebase-backup`
-3. 🔲 **Create test scenarios** - Document current working configurations
-4. 🔲 **Review upstream changelog** - Understand all breaking changes
+3. 🔲 **Document CI pipeline requirements** - Ensure base image ARG pattern is preserved
+4. 🔲 **Review upstream v0.13.5 changelog** - Understand breaking changes
 
 ### Short-term Actions (Priority 2)
-1. 🔲 **Start with Option C** - Contribute back to upstream
-   - Create PR for thermal mode selection
-   - Create PR for debug export (as optional feature)
-2. 🔲 **Engage with upstream maintainers** - Discuss our improvements
-3. 🔲 **Set up test environment** - For validating rebase
+1. 🔲 **Perform clean rebase**
+   - Follow strategy outlined above
+   - Keep only: Dockerfile ARG + debug export
+   - Drop: thermal mode, deferrable padding
+2. 🔲 **Validate CI pipeline** - Ensure base image injection still works
+3. 🔲 **Test debug export** - Verify problem export functionality
 
 ### Long-term Strategy
-1. 🔲 **Complete rebase after PRs accepted**
-2. 🔲 **Establish regular sync schedule** - Don't let it diverge again
-3. 🔲 **Consider becoming upstream contributor** - Prevent future divergence
+1. 🔲 **Optional: Contribute debug feature to upstream**
+   - Create PR with `debug_export_problem` as configurable option
+   - Benefits community, reduces our maintenance burden
+2. 🔲 **Establish regular sync schedule** - Quarterly merges from upstream
+3. 🔲 **Maintain minimal patch set** - Only 1-2 local patches (Dockerfile ARG + possibly debug if not upstreamed)
+4. 🔲 **Document local customizations** - Clear README noting which changes are local-only
 
 ---
 
 ## Risk Assessment
 
-### High Risks
-- **Breaking existing configurations** - Upstream has breaking changes
-- **Regression in thermal management** - Complex merge area
-- **Loss of debugging capability** - Must preserve carefully
-
 ### Medium Risks
-- **Test failures** - Extensive refactoring upstream
-- **Performance changes** - New solver options may behave differently
-- **Time investment** - Significant effort required
+- **CI pipeline breakage** - Base image ARG must be correctly reapplied
+- **Path structure changes** - /app/data/ → /data/ may affect workflows
+- **Performance changes** - New solver options and refactored code may behave differently
 
 ### Low Risks
+- **Debug feature** - Simple addition, doesn't affect core logic
+- **Test failures** - Accepting upstream tests wholesale
 - **Data loss** - Git history is preserved
-- **Reversibility** - Can always roll back with git
+- **Reversibility** - Can always roll back with git tags
+- **Config breakage** - Minimal configuration changes on our side
+
+**Risk Mitigation:**
+- Tag current state before rebase: `git tag pre-rebase-backup`
+- Test CI pipeline thoroughly before deploying
+- Keep backup of current Docker image
 
 ---
 
 ## Conclusion
 
-This fork has valuable improvements, particularly:
-1. **Thermal management flexibility** (constrain vs penalize modes)
-2. **Debugging capabilities** (problem/solution export)
+This fork has **2 valuable changes** that must be preserved:
 
-However, we're significantly behind upstream (590 commits, 1 year). The recommended path is:
+1. **Debugging Feature** - LP problem export capability (unique, should be contributed to upstream)
+2. **Dockerfile ARG Pattern** - CI infrastructure requirement (local patch, not for upstream)
 
-1. **Contribute our improvements back to upstream**
-2. **Then perform a clean rebase**
-3. **Establish regular sync schedule**
+We're significantly behind upstream (590 commits, 1 year), but the path forward is clear:
 
-This approach:
-- Benefits the community
-- Keeps us up-to-date with improvements
-- Reduces long-term maintenance burden
-- Provides recognition for our work
+### Recommended Approach: Clean Rebase with Minimal Patches
 
-The alternative (staying diverged) will only make future integration harder and prevent us from benefiting from upstream's many improvements (HiGHS solver, InfluxDB, DST fixes, better testing, etc.).
+**What to Keep:**
+- Dockerfile base image ARG (2-line patch for CI)
+- Debug export feature (configurable, off by default)
+
+**What to Drop:**
+- Thermal mode selection (functionally equivalent to high penalty_factor)
+- Deferrable load padding (upstream has identical + better)
+
+**Benefits of This Approach:**
+- ✅ Access to 590 upstream improvements (HiGHS, InfluxDB, DST fixes, etc.)
+- ✅ Minimal ongoing maintenance (only 1-2 local patches)
+- ✅ Easy future syncs with upstream
+- ✅ Modern codebase (ruff formatting, better tests, type hints)
+- ✅ CI infrastructure preserved
+- ✅ Optional: Contribute debug feature back to community
+
+**Estimated Effort:** 8-12 hours (reduced from initial 12-18 by dropping thermal mode)
+
+**This is a healthy fork pattern:** Maintaining minimal infrastructure patches while staying close to upstream, with optional contributions back to the community. Not a competing project, just local customizations for enterprise requirements.
 
 ---
 
@@ -521,44 +611,51 @@ Tag: `v0.13.5`
 
 ## Appendix B: Code Snippets for Reference
 
-### Our Thermal Mode Selection (To Preserve)
+### Debug Export Feature (To Preserve and Contribute)
 ```python
-if len(desired_temperatures) > I and desired_temperatures[I]:
-    if hc.get('mode', 'constrain') == 'constrain':
-        constraints.update({"constraint_defload{}_temperature_{}".format(k, I):
-            plp.LpConstraint(
-                e = predicted_temp[I],
-                sense = plp.LpConstraintGE if sense == 'heat' else plp.LpConstraintLE,
-                rhs = desired_temperatures[I],
-            )
-        })
-    elif hc['mode'] == 'penalize':
-        penalty_factor = hc.get('penalty_factor', 10)
-        if penalty_factor < 0:
-            raise ValueError("penalty_factor must be positive")
-        penalty_value = (predicted_temp[I] - desired_temperatures[I]) * penalty_factor * sense_coeff
-        penalty_var = plp.LpVariable("defload_{}_thermal_penalty_{}".format(k, I),
-                                     cat='Continuous', upBound=0)
-        constraints.update({
-            "constraint_defload{}_penalty_{}".format(k, I):
-            plp.LpConstraint(e = penalty_var - penalty_value, sense = plp.LpConstraintLE, rhs = 0)
-        })
-        opt_model.setObjective(opt_model.objective + penalty_var)
+# Add to end of perform_optimization(), make it configurable
+if self.optim_conf.get('debug_export_problem', False):
+    lp_debug_path = self.emhass_conf['data_path']
+    self.logger.info(f"Exporting optimization problem to {lp_debug_path}")
+
+    opt_model.writeLP(lp_debug_path / 'problem.lp')
+    opt_model.toJson(lp_debug_path / 'problem.json')
+
+    with open(lp_debug_path / "result.json", "w") as f:
+        result_dump = {
+            "status": self.optim_status,
+            "objective_value": plp.value(opt_model.objective),
+            "vars": {v.name: v.varValue for v in opt_model.variables()},
+            "constraints": {k: v.toDict() for k, v in opt_model.constraints.items()},
+            "cost_fun": opt_model.objective.toDict(),
+        }
+        json.dump(result_dump, f, default=repr, indent=2)
 ```
 
-### Our Debug Export (To Preserve)
-```python
-lp_debug_path = self.emhass_conf['data_path']
-opt_model.writeLP(lp_debug_path / 'problem.lp')
-opt_model.toJson(lp_debug_path / 'problem.json')
-with open(lp_debug_path / "result.json", "w") as f:
-    vars_dump = {v.name: v.varValue for v in opt_model.variables()}
-    result_dump = {
-        "vars": vars_dump,
-        "constraints": {k: v.toDict() for k, v in opt_model.constraints.items()},
-        "cost_fun": opt_model.objective.toDict(),
+### Dockerfile Base Image ARG (To Preserve as Local Patch)
+```dockerfile
+# Add at top of upstream's new Dockerfile:
+ARG base_image=ghcr.io/home-assistant/$TARGETARCH-base-debian:bookworm
+
+# Modify FROM line:
+FROM ${base_image} AS base
+
+# This allows CI to inject: IMAGE_ARG_base_image: base-image/image.tar
+```
+
+### User Documentation: Achieving Hard Constraints Without Mode Selection
+For users who want hard temperature constraints (equivalent to our dropped 'constrain' mode):
+```json
+{
+  "def_load_config": [
+    {
+      "thermal_config": {
+        "penalty_factor": 10000,  // High value ≈ hard constraint
+        "desired_temperatures": [20, 20, 20, ...]
+      }
     }
-    json.dump(result_dump, f, default=repr, indent=2)
+  ]
+}
 ```
 
 ---
