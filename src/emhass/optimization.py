@@ -1293,6 +1293,30 @@ class Optimization:
                 plp.value(opt_model.objective),
             )
 
+        # Optional debug export of LP problem and solution
+        if self.optim_conf.get("debug_export_problem", False):
+            import json
+
+            lp_debug_path = self.emhass_conf["data_path"]
+            self.logger.info(f"Exporting optimization problem to {lp_debug_path}")
+
+            # Export LP problem in multiple formats
+            opt_model.writeLP(lp_debug_path / "problem.lp")
+            opt_model.toJson(lp_debug_path / "problem.json")
+
+            # Export solution
+            with open(lp_debug_path / "result.json", "w") as f:
+                result_dump = {
+                    "status": self.optim_status,
+                    "objective_value": plp.value(opt_model.objective),
+                    "vars": {v.name: v.varValue for v in opt_model.variables()},
+                    "constraints": {
+                        k: v.toDict() for k, v in opt_model.constraints.items()
+                    },
+                    "cost_fun": opt_model.objective.toDict(),
+                }
+                json.dump(result_dump, f, default=repr, indent=2)
+
         # Build results Dataframe
         opt_tp = pd.DataFrame()
         opt_tp["P_PV"] = [P_PV[i] for i in set_I]
