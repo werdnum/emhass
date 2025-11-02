@@ -9,7 +9,10 @@ ARG TARGETARCH
 # armhf=raspbian, amd64,armv7,aarch64=debian
 ARG os_version=debian
 
-FROM ghcr.io/home-assistant/$TARGETARCH-base-$os_version:bookworm AS base
+# Allow CI to inject pre-built base image (for caching, security scanning, air-gapped builds)
+ARG base_image=ghcr.io/home-assistant/$TARGETARCH-base-$os_version:bookworm
+
+FROM ${base_image} AS base
 
 # check if TARGETARCH was passed by build-arg
 ARG TARGETARCH
