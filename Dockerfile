@@ -115,7 +115,12 @@ RUN [[ "${TARGETARCH}" == "aarch64" ]] && uv pip install --verbose ndindex || ec
 RUN uv pip install --verbose .
 RUN uv lock
 
-ENTRYPOINT [ "uv", "run", "--frozen", "gunicorn", "emhass.web_server:create_app()" ]
+# Fix permissions for non-root execution (supports Kubernetes securityContext)
+RUN groupadd --system --gid 2000 emhass && useradd --system --uid 1001 --gid 2000 emhass \
+    && chown -R emhass:emhass /app /data /share
+USER emhass
+
+ENTRYPOINT [ "uv", "run", "--no-sync", "gunicorn", "emhass.web_server:create_app()" ]
 
 # for running Unittest
 #COPY tests/ /app/tests
