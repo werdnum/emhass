@@ -54,8 +54,9 @@ RUN apt update \
 
 # Install uv (pip alternative)
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
-# Install python (version based on .python-version)
-RUN uv python install
+# Install python to system-wide location (accessible by non-root users at runtime)
+# See: https://github.com/astral-sh/uv/issues/7758
+RUN UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python uv python install
 
 # specify hdf5
 RUN ln -s /usr/include/hdf5/serial /usr/include/hdf5/include && export HDF5_DIR=/usr/include/hdf5
@@ -90,6 +91,8 @@ COPY pyproject.toml /app/
 #set python env variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
+# Disable uv cache for container deployments (--frozen flag makes cache unnecessary)
+ENV UV_NO_CACHE=1
 
 # Docker Labels for hass
 LABEL \
