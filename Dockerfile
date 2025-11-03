@@ -54,9 +54,10 @@ RUN apt update \
 
 # Install uv (pip alternative)
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
-# Install python to system-wide location (accessible by non-root users at runtime)
+# Set Python install location to system-wide path (accessible by non-root users)
 # See: https://github.com/astral-sh/uv/issues/7758
-RUN UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python uv python install
+ENV UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python
+RUN uv python install
 
 # specify hdf5
 RUN ln -s /usr/include/hdf5/serial /usr/include/hdf5/include && export HDF5_DIR=/usr/include/hdf5
