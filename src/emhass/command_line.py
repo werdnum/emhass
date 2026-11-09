@@ -383,8 +383,13 @@ def set_input_data_dict(
             )
             if isinstance(df_weather, bool) and not df_weather:
                 return False
+            # PV history is only retrieved when set_use_pv is True, so only mix
+            # the PV forecast with it in that case (avoids a KeyError on the
+            # PV sensor with set_use_pv=False and weather_forecast_method=list).
             P_PV_forecast = fcst.get_power_from_weather(
-                df_weather, set_mix_forecast=set_mix_forecast, df_now=df_input_data
+                df_weather,
+                set_mix_forecast=set_mix_forecast and optim_conf["set_use_pv"],
+                df_now=df_input_data,
             )
             # Adjust PV forecast
             if optim_conf["set_use_adjusted_pv"]:

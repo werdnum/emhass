@@ -503,6 +503,38 @@ class TestCommandLineUtils(unittest.TestCase):
         self.assertTrue(opt_res.isnull().sum().sum() == 0)
         self.assertTrue(len(opt_res) == 10)
 
+    def test_naive_mpc_optim_no_pv_weather_list(self):
+        # With set_use_pv=False the PV sensor is not retrieved from HA, so the
+        # PV forecast must not be mixed with (non-existent) PV history even when
+        # weather_forecast_method is "list" and load history is retrieved.
+        costfun = "profit"
+        action = "naive-mpc-optim"
+        params = TestCommandLineUtils.get_test_params(set_use_pv=False)
+        params["retrieve_hass_conf"]["sensor_power_photovoltaics"] = (
+            "sensor.not_retrieved_pv"
+        )
+        params["optim_conf"]["weather_forecast_method"] = "list"
+        params["optim_conf"]["load_forecast_method"] = "naive"
+        runtimeparams = {
+            "pv_power_forecast": [i + 1 for i in range(48)],
+            "load_cost_forecast": [i + 1 for i in range(48)],
+            "prod_price_forecast": [i + 1 for i in range(48)],
+        }
+        params["passed_data"] = runtimeparams
+        input_data_dict = set_input_data_dict(
+            emhass_conf,
+            costfun,
+            json.dumps(params),
+            json.dumps(runtimeparams),
+            action,
+            logger,
+            get_data_from_file=True,
+        )
+        self.assertIsInstance(input_data_dict, dict)
+        opt_res = naive_mpc_optim(input_data_dict, logger, debug=True)
+        self.assertIsInstance(opt_res, pd.DataFrame)
+        self.assertTrue(opt_res.isnull().sum().sum() == 0)
+
     # Test outputs of fit, predict and tune
     def test_forecast_model_fit_predict_tune(self):
         costfun = "profit"
